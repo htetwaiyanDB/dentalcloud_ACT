@@ -64,6 +64,11 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
     log_format main '$remote_addr - $remote_user [$time_local] "$request" '
                     '$status $body_bytes_sent "$http_referer" '
                     '"$http_user_agent" "$http_x_forwarded_for"';
@@ -123,6 +128,28 @@ server {
         access_log off;
         default_type text/plain;
         return 200 "ok\n";
+    }
+
+    # Same-origin gateway to the existing Supabase backend. This prevents
+    # browser CORS preflights from depending on the backend's CDN proxy while
+    # keeping the database and all Supabase services on their current server.
+    location /supabase/ {
+        proxy_pass https://167.86.78.69/;
+        proxy_http_version 1.1;
+        proxy_ssl_server_name on;
+        proxy_ssl_name supabaseact.dentalcloud.asia;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+        proxy_ssl_verify_depth 3;
+        proxy_set_header Host supabaseact.dentalcloud.asia;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 60s;
     }
 
     location = /index.html {
